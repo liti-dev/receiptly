@@ -249,6 +249,13 @@ export const POST: RequestHandler = async ({ request }) => {
 		if (file.type.startsWith('image/')) {
 			try {
 				console.log('Starting OCR processing...')
+				console.log('File details:', {
+					name: file.name,
+					type: file.type,
+					size: file.size,
+					tempPath: tempFilePath
+				})
+
 				// Add timeout to OCR processing
 				const ocrPromise = processReceiptOCR(tempFilePath)
 				const timeoutPromise = new Promise<never>(
@@ -269,6 +276,12 @@ export const POST: RequestHandler = async ({ request }) => {
 				shouldCleanupFile = true // Mark for cleanup after successful OCR
 			} catch (error) {
 				console.error('OCR processing failed:', error)
+				console.error('Error details:', {
+					message: error instanceof Error ? error.message : 'Unknown error',
+					stack: error instanceof Error ? error.stack : undefined,
+					fileType: file.type,
+					fileSize: file.size
+				})
 				shouldCleanupFile = true // Still cleanup even if OCR failed
 				// Continue without OCR data - we'll still save the receipt
 			}
@@ -287,12 +300,21 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		// Create receipt record in database using authenticated client with anon key
 		console.log('Inserting receipt into database...')
+		console.log('OCR result summary:', {
+			hasOcrResult: !!ocrResult,
+			rawTextLength: ocrResult?.rawText?.length || 0,
+			itemsCount: ocrResult?.items?.length || 0,
+			items: ocrResult?.items || []
+		})
+
 		const { data: receiptData, error: dbError } = await authenticatedSupabase
 			.from('receipts')
 			.insert({
 				user_id: user.id,
 				receipt_items: ocrResult?.items || [], // JSONB
-				raw_text: ocrResult?.rawText || null // fallback OCR dump
+				raw_text: ocrResult?.rawText || null, // fallback OCR dump
+				store_name: 'Unknown Store', // Add default store name
+				date: new Date().toISOString().split('T')[0] // Add current date
 			})
 			.select()
 			.single()
