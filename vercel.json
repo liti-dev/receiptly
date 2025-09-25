@@ -1,7 +1,0 @@
-{
-	"functions": {
-		"src/routes/api/upload-receipt/+server.ts": {
-			"maxDuration": 30
-		}
-	}
-}
