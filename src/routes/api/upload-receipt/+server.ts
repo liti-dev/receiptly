@@ -256,10 +256,10 @@ export const POST: RequestHandler = async ({ request }) => {
 					tempPath: tempFilePath
 				})
 
-				// Add timeout to OCR processing
+				// Add timeout to OCR processing (Railway has better limits)
 				const ocrPromise = processReceiptOCR(tempFilePath)
 				const timeoutPromise = new Promise<never>(
-					(_, reject) => setTimeout(() => reject(new Error('OCR timeout')), 8000) // 8 second timeout for Vercel
+					(_, reject) => setTimeout(() => reject(new Error('OCR timeout')), 30000) // 30 second timeout for Railway
 				)
 
 				ocrResult = await Promise.race([ocrPromise, timeoutPromise])
