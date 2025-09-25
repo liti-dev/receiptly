@@ -22,9 +22,13 @@
 	})
 
 	async function signInWithMagicLink() {
+		const redirectUrl = import.meta.env.VITE_APP_URL
+			? `${import.meta.env.VITE_APP_URL}/dashboard`
+			: `${window.location.origin}/dashboard`
+
 		const { error } = await supabase.auth.signInWithOtp({
 			email,
-			options: { emailRedirectTo: `${window.location.origin}/dashboard` }
+			options: { emailRedirectTo: redirectUrl }
 		})
 
 		if (error) {
