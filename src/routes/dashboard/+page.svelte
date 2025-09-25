@@ -91,6 +91,7 @@
 				return
 			}
 
+			console.log('Starting upload for file:', file.name, 'size:', file.size)
 			const formData = new FormData()
 			formData.append('receipt', file)
 
@@ -102,16 +103,22 @@
 				body: formData
 			})
 
+			console.log('Upload response status:', response.status)
+
 			if (response.ok) {
+				const result = await response.json()
+				console.log('Upload successful:', result)
 				uploadMessage = 'Receipt uploaded successfully!'
 				fileInput.value = ''
 				// Refresh receipts list
 				location.reload()
 			} else {
 				const error = await response.text()
+				console.error('Upload failed with status:', response.status, 'error:', error)
 				uploadMessage = `Upload failed: ${error}`
 			}
 		} catch (error) {
+			console.error('Upload error:', error)
 			uploadMessage = `Upload failed: ${error}`
 		} finally {
 			uploading = false

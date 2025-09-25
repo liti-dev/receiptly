@@ -159,36 +159,54 @@ Return valid JSON array: [{"name": "Item Name", "category": "processed food"}]`
 }
 
 export const POST: RequestHandler = async ({ request }) => {
+	console.log('Upload receipt API called')
 	try {
 		// Check authentication
 		const authHeader = request.headers.get('authorization')
 		if (!authHeader || !authHeader.startsWith('Bearer ')) {
+			console.log('No auth header found')
 			return new Response('Unauthorized', { status: 401 })
 		}
 
 		const token = authHeader.split(' ')[1]
+		console.log('Token received, length:', token.length)
+
+		// Get environment variables (these work in server-side code)
+		const supabaseUrl = process.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL
+		const supabaseAnonKey =
+			process.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY
+
+		console.log('Environment check:', {
+			hasUrl: !!supabaseUrl,
+			hasKey: !!supabaseAnonKey,
+			urlLength: supabaseUrl?.length || 0
+		})
+
+		if (!supabaseUrl || !supabaseAnonKey) {
+			console.error('Missing Supabase environment variables')
+			return new Response('Server configuration error', { status: 500 })
+		}
 
 		// Create authenticated client with auth headers
-		const authenticatedSupabase = createClient(
-			import.meta.env.VITE_SUPABASE_URL,
-			import.meta.env.VITE_SUPABASE_ANON_KEY,
-			{
-				global: {
-					headers: {
-						Authorization: `Bearer ${token}`
-					}
+		const authenticatedSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+			global: {
+				headers: {
+					Authorization: `Bearer ${token}`
 				}
 			}
-		)
+		})
 
 		// Verify the JWT token with Supabase
+		console.log('Verifying token with Supabase...')
 		const {
 			data: { user },
 			error: authError
 		} = await supabase.auth.getUser(token)
 		if (authError || !user) {
+			console.log('Auth error:', authError)
 			return new Response('Invalid token', { status: 401 })
 		}
+		console.log('User authenticated:', user.id)
 
 		// Parse multipart form data
 		const formData = await request.formData()
@@ -230,12 +248,22 @@ export const POST: RequestHandler = async ({ request }) => {
 
 		if (file.type.startsWith('image/')) {
 			try {
-				ocrResult = await processReceiptOCR(tempFilePath)
+				console.log('Starting OCR processing...')
+				// Add timeout to OCR processing
+				const ocrPromise = processReceiptOCR(tempFilePath)
+				const timeoutPromise = new Promise<never>(
+					(_, reject) => setTimeout(() => reject(new Error('OCR timeout')), 8000) // 8 second timeout for Vercel
+				)
+
+				ocrResult = await Promise.race([ocrPromise, timeoutPromise])
+				console.log('OCR completed, text length:', ocrResult?.rawText?.length || 0)
 
 				// Extract food items
 				if (ocrResult && ocrResult.rawText) {
+					console.log('Extracting food items...')
 					const foodItems = await extractFoodItems(ocrResult.rawText)
 					ocrResult.items = foodItems
+					console.log('Food items extracted:', foodItems.length)
 				}
 
 				shouldCleanupFile = true // Mark for cleanup after successful OCR
@@ -258,6 +286,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		}
 
 		// Create receipt record in database using authenticated client with anon key
+		console.log('Inserting receipt into database...')
 		const { data: receiptData, error: dbError } = await authenticatedSupabase
 			.from('receipts')
 			.insert({
@@ -272,6 +301,7 @@ export const POST: RequestHandler = async ({ request }) => {
 			console.error('Database error:', dbError)
 			return new Response(`Failed to save receipt record: ${dbError.message}`, { status: 500 })
 		}
+		console.log('Receipt saved successfully:', receiptData.id)
 
 		return json({
 			success: true,
